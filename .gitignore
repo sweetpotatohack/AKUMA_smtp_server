@@ -1,0 +1,45 @@
+# Логи
+*.log
+*.log.*
+/var/log/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.csr
+
+# Configuration backups
+*.bak
+*.backup
+
+# DNS records (содержат приватную информацию)
+dns_records_*.txt
+
+# Пароли и секреты
+*.secret
+*.password
+.env
+
+# Системные файлы
+/etc/postfix/
+/etc/dovecot/
+/etc/opendkim/
+/etc/letsencrypt/
+
+# Backup files
+backup_*
+mail_backup_*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
