@@ -13,3 +13,12 @@ __pycache__/
 # Системные файлы
 .DS_Store
 Thumbs.db
+
+# Sensitive data
+*.env
+*.conf
+config/
+
+# Backups
+*.bak
+*.backup
