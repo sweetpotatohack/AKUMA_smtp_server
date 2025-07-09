@@ -1,0 +1,15 @@
+# Исключить файлы с приватными ключами
+*.private
+*.key
+/keys/
+/logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Системные файлы
+.DS_Store
+Thumbs.db
