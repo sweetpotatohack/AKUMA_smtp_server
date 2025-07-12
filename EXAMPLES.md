@@ -1,320 +1,313 @@
-# 📖 Примеры использования AKUMA SMTP Server
+# 📚 Примеры конфигураций AKUMA SMTP Server
 
-## 🎯 Сценарий 1: Настройка сервера для тестирования
+## 🔧 Ручная настройка Postfix
 
-### Шаг 1: Подготовка
+Если нужно дополнительно настроить Postfix после установки:
+
 ```bash
-# Обновляем систему
-sudo apt update && sudo apt upgrade -y
-
-# Скачиваем скрипт
-wget https://raw.githubusercontent.com/sweetpotatohack/AKUMA_smtp_server/main/smtp_ultimate_deploy.sh
-chmod +x smtp_ultimate_deploy.sh
-```
-
-### Шаг 2: Настройка DNS (пример для test.com)
-```dns
-A     mail.test.com              IN A     123.456.789.10
-MX    test.com                  IN MX    10 mail.test.com
-```
-
-### Шаг 3: Запуск скрипта
-```bash
-sudo ./smtp_ultimate_deploy.sh
-```
-
-**Ввод данных:**
-- Домен: `test.com`
-- Пользователь: `admin`
-- Пароль: `SecurePass123!`
-
-### Шаг 4: Результат
-```
-📧 НАСТРОЙКИ ДЛЯ ПОЧТОВЫХ КЛИЕНТОВ:
-Домен: test.com
-Сервер: mail.test.com (IP: 123.456.789.10)
-Пользователь: admin@test.com
-Пароль: SecurePass123!
-```
-
-## 🎯 Сценарий 2: Настройка для GoPhish
-
-### Шаг 1: Развертывание сервера
-```bash
-sudo ./smtp_ultimate_deploy.sh
-```
-
-### Шаг 2: Настройка GoPhish
-```json
-{
-  "name": "AKUMA SMTP",
-  "host": "mail.yourcompany.com:465",
-  "username": "phishing@yourcompany.com",
-  "password": "YourSecurePassword",
-  "ignore_cert_errors": false,
-  "headers": [
-    {
-      "key": "X-Mailer",
-      "value": "GoPhish"
-    }
-  ]
-}
-```
-
-### Шаг 3: Тестирование
-```bash
-# Проверяем подключение
-telnet mail.yourcompany.com 465
-
-# Проверяем SSL
-openssl s_client -connect mail.yourcompany.com:465
-```
-
-## 🎯 Сценарий 3: Корпоративная почта
-
-### Настройка для компании Example Corp
-
-**DNS записи:**
-```dns
-A     mail.example-corp.com      IN A     192.168.1.100
-MX    example-corp.com          IN MX    10 mail.example-corp.com
-TXT   example-corp.com          IN TXT   "v=spf1 mx ~all"
-TXT   _dmarc.example-corp.com   IN TXT   "v=DMARC1; p=quarantine; rua=mailto:dmarc@example-corp.com"
-```
-
-**Пользователи:**
-- CEO: `ceo@example-corp.com`
-- IT: `it@example-corp.com`
-- HR: `hr@example-corp.com`
-
-**Настройки Outlook:**
-```
-Имя: John Doe
-Email: john.doe@example-corp.com
-Входящий сервер: mail.example-corp.com:993 (SSL)
-Исходящий сервер: mail.example-corp.com:465 (SSL)
-```
-
-## 🎯 Сценарий 4: Настройка для пентестинга
-
-### Подготовка домена для социальной инженерии
-
-**1. Регистрируем похожий домен:**
-```
-Оригинал: google.com
-Поддельный: g0ogle.com (с нулем вместо o)
-```
-
-**2. Настраиваем DNS:**
-```dns
-A     mail.g0ogle.com           IN A     YOUR_SERVER_IP
-MX    g0ogle.com               IN MX    10 mail.g0ogle.com
-TXT   g0ogle.com               IN TXT   "v=spf1 mx ~all"
-```
-
-**3. Запускаем скрипт:**
-```bash
-sudo ./smtp_ultimate_deploy.sh
-# Домен: g0ogle.com
-# Пользователь: noreply
-# Пароль: ComplexPassword123!
-```
-
-**4. Настраиваем GoPhish для фишинга:**
-```json
-{
-  "name": "Fake Google",
-  "host": "mail.g0ogle.com:465",
-  "username": "noreply@g0ogle.com",
-  "password": "ComplexPassword123!",
-  "ignore_cert_errors": false
-}
-```
-
-## 🎯 Сценарий 5: Высоконагруженный сервер
-
-### Настройка для большого объема писем
-
-**1. Модифицируем Postfix настройки:**
-```bash
-# Редактируем /etc/postfix/main.cf
+# Редактируем main.cf
 nano /etc/postfix/main.cf
 
-# Добавляем:
-# Увеличиваем лимиты
+# Основные параметры
+mydomain = yourdomain.com
+myhostname = mail.yourdomain.com
+myorigin = $mydomain
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+
+# Перезапускаем
+systemctl restart postfix
+```
+
+## 📧 Настройка виртуальных почтовых ящиков
+
+```bash
+# Создаем файл виртуальных алиасов
+echo "admin@yourdomain.com    admin" >> /etc/postfix/virtual
+echo "support@yourdomain.com support" >> /etc/postfix/virtual
+echo "info@yourdomain.com    info" >> /etc/postfix/virtual
+
+# Обновляем базу данных
+postmap /etc/postfix/virtual
+
+# Перезапускаем Postfix
+systemctl restart postfix
+```
+
+## 🛡️ Усиленные настройки безопасности
+
+### Postfix security hardening
+
+```bash
+# Добавляем в /etc/postfix/main.cf
+disable_vrfy_command = yes
+smtpd_helo_required = yes
+smtpd_helo_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_invalid_helo_hostname,
+    reject_non_fqdn_helo_hostname,
+    reject_unknown_helo_hostname,
+    permit
+
+smtpd_sender_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_non_fqdn_sender,
+    reject_unknown_sender_domain,
+    permit
+
+smtpd_recipient_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_unauth_destination,
+    reject_non_fqdn_recipient,
+    reject_unknown_recipient_domain,
+    permit
+```
+
+## 📊 Мониторинг и логирование
+
+### Настройка детального логирования
+
+```bash
+# В /etc/postfix/main.cf
+debug_peer_level = 2
+debug_peer_list = gmail.com, yahoo.com, outlook.com
+
+# В /etc/dovecot/dovecot.conf  
+mail_debug = yes
+auth_verbose = yes
+auth_debug = yes
+```
+
+### Анализ логов
+
+```bash
+# Топ отправителей
+grep "from=" /var/log/mail.log | awk '{print $7}' | sort | uniq -c | sort -nr | head -10
+
+# Топ получателей  
+grep "to=" /var/log/mail.log | awk '{print $7}' | sort | uniq -c | sort -nr | head -10
+
+# Ошибки доставки
+grep "status=bounced" /var/log/mail.log
+
+# DKIM проверки
+grep "dkim" /var/log/mail.log | tail -20
+```
+
+## 🚀 Настройки для высокой нагрузки
+
+### Оптимизация Postfix
+
+```bash
+# В /etc/postfix/main.cf
 default_process_limit = 200
 smtpd_client_connection_count_limit = 50
 smtpd_client_connection_rate_limit = 100
+anvil_rate_time_unit = 60s
+anvil_status_update_time = 600s
 
-# Оптимизируем очереди
-maximal_queue_lifetime = 1h
-bounce_queue_lifetime = 1h
+# Очереди
+maximal_queue_lifetime = 5d
+bounce_queue_lifetime = 5d
+maximal_backoff_time = 4000s
+minimal_backoff_time = 300s
+queue_run_delay = 300s
 ```
 
-**2. Настраиваем мониторинг:**
-```bash
-# Установка мониторинга
-apt install -y mailgraph pflogsumm
+### Оптимизация Dovecot
 
-# Просмотр статистики
-pflogsumm /var/log/mail.log
+```bash
+# В /etc/dovecot/dovecot.conf
+default_process_limit = 1000
+default_client_limit = 1000
+
+# В /etc/dovecot/conf.d/10-master.conf
+service imap-login {
+  inet_listener imap {
+    port = 143
+  }
+  inet_listener imaps {
+    port = 993
+    ssl = yes
+  }
+  process_min_avail = 4
+  process_limit = 200
+}
 ```
 
-## 🎯 Сценарий 6: Тестирование безопасности
+## 📱 Настройки для мобильных клиентов
 
-### Проверка DKIM подписей
+### iOS Mail
 
-**1. Отправляем тестовое письмо:**
-```bash
-echo "Test DKIM message" | mail -s "DKIM Test" test@gmail.com
+```
+Входящий сервер: mail.yourdomain.com
+Имя пользователя: username
+Пароль: password
+Сервер исходящей почты: mail.yourdomain.com
+Использовать SSL: Да
+Аутентификация: Пароль
+IMAP порт: 993
+SMTP порт: 465
 ```
 
-**2. Проверяем DKIM запись:**
+### Android Gmail
+
+```
+Тип учетной записи: IMAP
+Сервер входящей почты: mail.yourdomain.com:993
+Требуется SSL: Да
+Сервер исходящей почты: mail.yourdomain.com:465
+Требуется SSL: Да
+Требуется вход: Да
+```
+
+## 🔧 Решение частых проблем
+
+### Проблема: Письма не отправляются
+
 ```bash
+# Проверяем очередь
+postqueue -p
+
+# Принудительная отправка
+postqueue -f
+
+# Проверяем логи
+tail -f /var/log/mail.log
+```
+
+### Проблема: Письма попадают в спам
+
+```bash
+# Проверяем DKIM
 dig TXT default._domainkey.yourdomain.com
+
+# Проверяем SPF
+dig TXT yourdomain.com | grep spf1
+
+# Проверяем DMARC
+dig TXT _dmarc.yourdomain.com
+
+# Тестируем на mail-tester.com
+echo "Test message" | mail -s "Test" check-auth@verifier.port25.com
 ```
 
-**3. Используем внешние инструменты:**
+### Проблема: SSL сертификат не обновляется
+
 ```bash
-# Проверка на mail-tester.com
-curl -X POST https://www.mail-tester.com/test-your-email
+# Ручное обновление
+certbot renew --force-renewal
+
+# Проверяем автообновление
+systemctl status certbot.timer
+
+# Тестируем обновление
+certbot renew --dry-run
 ```
 
-### Проверка SPF записей
+## 🌐 Интеграция с веб-интерфейсами
 
-**1. Тестируем SPF:**
+### Roundcube Webmail
+
 ```bash
-dig TXT yourdomain.com | grep spf
+# Установка
+apt install roundcube roundcube-mysql
+
+# Настройка в /etc/roundcube/config.inc.php
+$config['default_host'] = 'ssl://mail.yourdomain.com';
+$config['default_port'] = 993;
+$config['smtp_server'] = 'ssl://mail.yourdomain.com';
+$config['smtp_port'] = 465;
 ```
 
-**2. Проверяем через внешние сервисы:**
+### Rainloop
+
 ```bash
-# Используем mxtoolbox.com
-curl "https://mxtoolbox.com/spf.aspx?domain=yourdomain.com"
+# Скачиваем
+wget -O rainloop.zip http://www.rainloop.net/repository/webmail/rainloop-community-latest.zip
+
+# Распаковываем
+unzip rainloop.zip -d /var/www/webmail/
+
+# Настраиваем права
+chown -R www-data:www-data /var/www/webmail/
 ```
 
-## 🎯 Сценарий 7: Backup и восстановление
+## 📈 Backup и восстановление
 
-### Создание резервной копии
+### Backup конфигураций
 
-**1. Backup конфигураций:**
 ```bash
 #!/bin/bash
-BACKUP_DIR="/root/mail_backup_$(date +%Y%m%d)"
+# backup-mail-config.sh
+
+BACKUP_DIR="/backup/mail/$(date +%Y%m%d)"
 mkdir -p $BACKUP_DIR
 
-# Копируем конфигурации
-cp -r /etc/postfix/ $BACKUP_DIR/
-cp -r /etc/dovecot/ $BACKUP_DIR/
-cp -r /etc/opendkim/ $BACKUP_DIR/
-cp -r /etc/letsencrypt/ $BACKUP_DIR/
+# Backup Postfix
+cp -r /etc/postfix $BACKUP_DIR/
+cp -r /etc/opendkim $BACKUP_DIR/
 
-# Архивируем
-tar -czf mail_backup_$(date +%Y%m%d).tar.gz $BACKUP_DIR/
-```
+# Backup Dovecot
+cp -r /etc/dovecot $BACKUP_DIR/
 
-**2. Backup пользователей:**
-```bash
-# Копируем почтовые ящики
-cp -r /home/*/Maildir/ $BACKUP_DIR/mailboxes/
+# Backup SSL certificates
+cp -r /etc/letsencrypt $BACKUP_DIR/
 
-# Копируем пользователей
-cp /etc/passwd $BACKUP_DIR/
-cp /etc/shadow $BACKUP_DIR/
+# Backup mailboxes
+tar -czf $BACKUP_DIR/mailboxes.tar.gz /home/*/Maildir/
+
+echo "Backup completed: $BACKUP_DIR"
 ```
 
 ### Восстановление
 
-**1. Восстановление конфигураций:**
 ```bash
-# Распаковываем backup
-tar -xzf mail_backup_20231201.tar.gz
+#!/bin/bash
+# restore-mail-config.sh
 
-# Восстанавливаем конфигурации
-cp -r backup/postfix/ /etc/
-cp -r backup/dovecot/ /etc/
-cp -r backup/opendkim/ /etc/
+BACKUP_DIR="/backup/mail/20241201"
 
-# Перезапускаем службы
-systemctl restart postfix dovecot opendkim
+# Stop services
+systemctl stop postfix dovecot opendkim
+
+# Restore configs
+cp -r $BACKUP_DIR/postfix /etc/
+cp -r $BACKUP_DIR/dovecot /etc/
+cp -r $BACKUP_DIR/opendkim /etc/
+
+# Restore SSL certificates
+cp -r $BACKUP_DIR/letsencrypt /etc/
+
+# Restore mailboxes
+tar -xzf $BACKUP_DIR/mailboxes.tar.gz -C /
+
+# Fix permissions
+chown -R opendkim:opendkim /etc/opendkim
+chown -R dovecot:dovecot /etc/dovecot
+
+# Start services
+systemctl start opendkim postfix dovecot
 ```
 
-## 🎯 Сценарий 8: Интеграция с внешними сервисами
+## 🎯 Advanced DKIM настройки
 
-### Настройка с MailHog для тестирования
+### Множественные селекторы
 
-**1. Установка MailHog:**
 ```bash
-# Скачиваем MailHog
-wget https://github.com/mailhog/MailHog/releases/download/v1.0.0/MailHog_linux_amd64
-chmod +x MailHog_linux_amd64
-sudo mv MailHog_linux_amd64 /usr/local/bin/mailhog
+# Создаем дополнительный селектор
+mkdir -p /etc/opendkim/keys/yourdomain.com
+opendkim-genkey -s backup -d yourdomain.com -D /etc/opendkim/keys/yourdomain.com/
 
-# Запускаем
-mailhog &
-```
+# Добавляем в KeyTable
+echo "backup._domainkey.yourdomain.com yourdomain.com:backup:/etc/opendkim/keys/yourdomain.com/backup.private" >> /etc/opendkim/KeyTable
 
-**2. Настройка Postfix для тестирования:**
-```bash
-# Редактируем /etc/postfix/main.cf
-relayhost = [127.0.0.1]:1025
-
-# Перезагружаем
-systemctl reload postfix
-```
-
-## 🎯 Сценарий 9: Масштабирование
-
-### Настройка нескольких доменов
-
-**1. Добавляем виртуальные домены:**
-```bash
-# Создаем файл виртуальных доменов
-echo "domain1.com" >> /etc/postfix/virtual_domains
-echo "domain2.com" >> /etc/postfix/virtual_domains
-
-# Обновляем базу
-postmap /etc/postfix/virtual_domains
-```
-
-**2. Настраиваем виртуальные алиасы:**
-```bash
-# Создаем /etc/postfix/virtual_aliases
-echo "admin@domain1.com user1@domain1.com" >> /etc/postfix/virtual_aliases
-echo "admin@domain2.com user2@domain2.com" >> /etc/postfix/virtual_aliases
-
-# Обновляем
-postmap /etc/postfix/virtual_aliases
-```
-
-## 🎯 Сценарий 10: Устранение проблем
-
-### Проблема: Письма не отправляются
-
-**Диагностика:**
-```bash
-# Проверяем статус служб
-systemctl status postfix
-
-# Смотрим логи
-tail -f /var/log/mail.log
-
-# Проверяем очередь
-mailq
-
-# Тестируем подключение
-telnet mail.yourdomain.com 25
-```
-
-**Решение:**
-```bash
-# Очищаем очередь
-postfix flush
-
-# Перезапускаем службы
-systemctl restart postfix
+# Добавляем в SigningTable  
+echo "*@yourdomain.com backup._domainkey.yourdomain.com" >> /etc/opendkim/SigningTable
 ```
 
 ---
 
-**💡 Совет:** Всегда тестируйте настройки на тестовом сервере перед применением в продакшене!
+*Все примеры протестированы на боевых серверах. Используйте с умом!*
