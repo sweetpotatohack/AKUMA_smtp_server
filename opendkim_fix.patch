@@ -1,0 +1,23 @@
+--- smtp_ultimate_deploy.sh.backup	2025-07-13 16:00:00.000000000 +0000
++++ smtp_ultimate_deploy.sh	2025-07-13 16:30:00.000000000 +0000
+@@ -186,6 +186,9 @@
+ # Настройки подписи
+ SigningTable            refile:/etc/opendkim/signing.table
+ KeyTable                refile:/etc/opendkim/key.table
++
++# PID файл для systemd
++PidFile                 /run/opendkim/opendkim.pid
+ DKIM_EOF
+     
+     # Создаём файл доверенных хостов
+@@ -211,6 +214,10 @@
+     chown -R opendkim:opendkim /etc/opendkim/
+     chmod 755 /etc/opendkim/keys/$DOMAIN/
+     
++    # Создаём и настраиваем директорию для PID файла
++    mkdir -p /run/opendkim
++    chown opendkim:opendkim /run/opendkim
++    
+     print_status "DKIM настроен успешно"
+ }
+ 
