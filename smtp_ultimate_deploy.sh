@@ -430,21 +430,37 @@ setup_firewall() {
     print_status "Настраиваем firewall..."
     
     # Включаем UFW
-    /usr/sbin/ufw --force enable
+    # Install ufw if not present
+    if ! command -v ufw >/dev/null 2>&1; then
+        echo "[INFO] Устанавливаем ufw..."
+        apt-get update -qq && apt-get install -y ufw
+    fi
+
+    # Install ufw if not present
+    if ! command -v ufw &> /dev/null; then
+        echo "Installing ufw..."
+        apt-get update -qq && apt-get install -y ufw
+    fi
+    # Check if ufw is installed
+    if ! command -v ufw &> /dev/null; then
+        echo "Installing ufw..."
+        apt-get update && apt-get install -y ufw
+    fi
+    ufw --force enable
     
     # Открываем SSH сначала (чтобы не заблокироваться)
-    /usr/sbin/ufw allow ssh
+    ufw allow ssh
     
     # Открываем порты почтового сервера
-    /usr/sbin/ufw allow 25/tcp    # SMTP
-    /usr/sbin/ufw allow 143/tcp   # IMAP
-    /usr/sbin/ufw allow 110/tcp   # POP3
-    /usr/sbin/ufw allow 587/tcp   # SMTP submission
-    /usr/sbin/ufw allow 465/tcp   # SMTPS
-    /usr/sbin/ufw allow 993/tcp   # IMAPS
-    /usr/sbin/ufw allow 995/tcp   # POP3S
-    /usr/sbin/ufw allow 80/tcp    # HTTP (для Let's Encrypt)
-    /usr/sbin/ufw allow 443/tcp   # HTTPS
+    ufw allow 25/tcp    # SMTP
+    ufw allow 143/tcp   # IMAP
+    ufw allow 110/tcp   # POP3
+    ufw allow 587/tcp   # SMTP submission
+    ufw allow 465/tcp   # SMTPS
+    ufw allow 993/tcp   # IMAPS
+    ufw allow 995/tcp   # POP3S
+    ufw allow 80/tcp    # HTTP (для Let's Encrypt)
+    ufw allow 443/tcp   # HTTPS
     
     print_status "Firewall настроен"
 }
