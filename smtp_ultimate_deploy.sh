@@ -1,3 +1,4 @@
+cat smtp_ultimate_deploy.sh
 #!/bin/bash
 # ================================================
 # Феня's Ultimate SMTP/IMAP Server Deployment Script
