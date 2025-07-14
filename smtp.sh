@@ -472,6 +472,7 @@ setup_firewall() {
 
 # Настройка Fail2Ban
 setup_fail2ban() {
+    setup_opendkim
     print_status "Настраиваем Fail2Ban..."
 
     cat > /etc/fail2ban/jail.local << FAIL2BAN_EOF
@@ -505,7 +506,8 @@ FAIL2BAN_EOF
 }
 
 # Генерация DNS записей
-generate_dns_records() {
+generate_correct_dns_records() {
+    check_dns_records
     print_status "Генерируем DNS записи..."
 
     local DKIM_RECORD
@@ -714,9 +716,11 @@ main() {
     create_user
     setup_firewall
     setup_fail2ban
+    setup_opendkim
     start_and_verify_services
     test_services
-    generate_dns_records
+    generate_correct_dns_records
+    check_dns_records
     show_summary
 }
 
@@ -764,5 +768,217 @@ start_and_verify_services() {
     
     echo
     print_status "✅ Службы запущены и проверены"
+}
+
+
+# ================================================
+# PATCH: Правильная настройка OpenDKIM
+# ================================================
+
+# Функция для настройки OpenDKIM
+setup_opendkim() {
+    print_status "🔐 Настройка OpenDKIM для подписи писем"
+    
+    # Установка OpenDKIM
+    echo "Установка OpenDKIM..."
+    apt update -qq
+    apt install -y opendkim opendkim-tools
+    
+    # Создание директории для ключей
+    mkdir -p /etc/opendkim/keys/$DOMAIN
+    
+    # Конфигурация OpenDKIM
+    cat > /etc/opendkim.conf << 'DKIM_CONF'
+# OpenDKIM Configuration
+Syslog yes
+UMask 002
+Mode sv
+Canonicalization relaxed/simple
+ExternalIgnoreList refile:/etc/opendkim/TrustedHosts
+InternalHosts refile:/etc/opendkim/TrustedHosts
+KeyTable refile:/etc/opendkim/KeyTable
+SigningTable refile:/etc/opendkim/SigningTable
+SignatureAlgorithm rsa-sha256
+Socket inet:8891@localhost
+RequireSafeKeys false
+DKIM_CONF
+
+    # TrustedHosts
+    cat > /etc/opendkim/TrustedHosts << TRUSTED_EOF
+127.0.0.1
+::1
+localhost
+$DOMAIN
+*.$DOMAIN
+TRUSTED_EOF
+
+    # SigningTable
+    cat > /etc/opendkim/SigningTable << SIGN_EOF
+*@$DOMAIN default._domainkey.$DOMAIN
+SIGN_EOF
+
+    # KeyTable
+    cat > /etc/opendkim/KeyTable << KEY_EOF
+default._domainkey.$DOMAIN $DOMAIN:default:/etc/opendkim/keys/$DOMAIN/default.private
+KEY_EOF
+
+    # Генерация DKIM ключей
+    echo "Генерация DKIM ключей..."
+    cd /etc/opendkim/keys/$DOMAIN
+    opendkim-genkey -s default -d $DOMAIN
+    
+    # Настройка прав доступа
+    chown opendkim:opendkim /etc/opendkim/keys/$DOMAIN/default.private
+    chmod 600 /etc/opendkim/keys/$DOMAIN/default.private
+    
+    # Настройка Postfix для работы с OpenDKIM
+    echo "Настройка Postfix для OpenDKIM..."
+    postconf -e 'smtpd_milters = inet:localhost:8891'
+    postconf -e 'non_smtpd_milters = inet:localhost:8891'
+    postconf -e 'milter_default_action = accept'
+    
+    # Запуск OpenDKIM
+    systemctl start opendkim
+    systemctl enable opendkim
+    
+    # Проверка статуса
+    if systemctl is-active --quiet opendkim; then
+        echo -e "${GREEN}✅ OpenDKIM запущен и работает${NC}"
+    else
+        echo -e "${RED}❌ Проблема с OpenDKIM${NC}"
+        systemctl status opendkim --no-pager
+    fi
+    
+    echo
+    print_status "✅ OpenDKIM настроен успешно"
+}
+
+# Функция для генерации правильных DNS записей
+generate_correct_dns_records() {
+    check_dns_records
+    print_status "🌐 Генерация DNS записей"
+    
+    # Получаем публичный ключ DKIM
+    local dkim_key=""
+    if [ -f "/etc/opendkim/keys/$DOMAIN/default.txt" ]; then
+        dkim_key=$(cat /etc/opendkim/keys/$DOMAIN/default.txt | grep -oP '(?<=p=)[^"]*' | tr -d '\n\t ')
+    fi
+    
+    # Создаем файл с DNS записями
+    cat > /root/DNS_RECORDS_$DOMAIN.txt << DNS_EOF
+=== DNS записи для $DOMAIN ===
+
+1. A запись для почтового сервера:
+   Имя: mail.$DOMAIN
+   Тип: A
+   Значение: $SERVER_IP
+   TTL: 3600
+
+2. MX запись:
+   Имя: $DOMAIN (или @)
+   Тип: MX
+   Значение: mail.$DOMAIN
+   Приоритет: 10
+   TTL: 3600
+
+3. SPF запись:
+   Имя: $DOMAIN (или @)
+   Тип: TXT
+   Значение: "v=spf1 mx a:mail.$DOMAIN ~all"
+   TTL: 3600
+
+4. DKIM запись:
+   Имя: default._domainkey.$DOMAIN
+   Тип: TXT
+   Значение: "v=DKIM1; k=rsa; p=$dkim_key"
+   TTL: 3600
+
+5. DMARC запись:
+   Имя: _dmarc.$DOMAIN
+   Тип: TXT
+   Значение: "v=DMARC1; p=quarantine; rua=mailto:$EMAIL"
+   TTL: 3600
+
+=== Команды для проверки ===
+dig +short mail.$DOMAIN A
+dig +short $DOMAIN MX
+dig +short $DOMAIN TXT
+dig +short default._domainkey.$DOMAIN TXT
+dig +short _dmarc.$DOMAIN TXT
+
+=== Важно! ===
+Обязательно добавьте ВСЕ эти записи в DNS вашего провайдера!
+Без правильных DNS записей почта работать не будет!
+DNS_EOF
+
+    echo -e "${GREEN}✅ DNS записи созданы в файле: /root/DNS_RECORDS_$DOMAIN.txt${NC}"
+    
+    # Показываем записи на экране
+    echo
+    echo "=== КРИТИЧЕСКИ ВАЖНЫЕ DNS ЗАПИСИ ==="
+    echo
+    echo "1. A запись:"
+    echo "   Имя: mail.$DOMAIN"
+    echo "   Тип: A"
+    echo "   Значение: $SERVER_IP"
+    echo
+    echo "2. MX запись:"
+    echo "   Имя: $DOMAIN (или @)"
+    echo "   Тип: MX"
+    echo "   Значение: mail.$DOMAIN"
+    echo "   Приоритет: 10"
+    echo
+    echo "3. DKIM запись:"
+    echo "   Имя: default._domainkey.$DOMAIN"
+    echo "   Тип: TXT"
+    echo "   Значение: \"v=DKIM1; k=rsa; p=$dkim_key\""
+    echo
+    echo -e "${YELLOW}⚠️  БЕЗ ЭТИХ ЗАПИСЕЙ ПОЧТА НЕ БУДЕТ РАБОТАТЬ!${NC}"
+    echo
+}
+
+
+# ================================================
+# PATCH: Проверка DNS записей
+# ================================================
+
+# Функция для проверки DNS записей
+check_dns_records() {
+    print_status "🔍 Проверка DNS записей"
+    
+    echo "Проверяем A запись для mail.$DOMAIN..."
+    local a_record=$(dig +short mail.$DOMAIN A)
+    if [ -n "$a_record" ]; then
+        echo -e "${GREEN}✅ A запись: mail.$DOMAIN → $a_record${NC}"
+    else
+        echo -e "${RED}❌ A запись для mail.$DOMAIN не найдена!${NC}"
+    fi
+    
+    echo "Проверяем MX запись для $DOMAIN..."
+    local mx_record=$(dig +short $DOMAIN MX)
+    if [ -n "$mx_record" ]; then
+        echo -e "${GREEN}✅ MX запись: $mx_record${NC}"
+    else
+        echo -e "${RED}❌ MX запись для $DOMAIN не найдена!${NC}"
+    fi
+    
+    echo "Проверяем DKIM запись..."
+    local dkim_record=$(dig +short default._domainkey.$DOMAIN TXT)
+    if [ -n "$dkim_record" ]; then
+        echo -e "${GREEN}✅ DKIM запись найдена${NC}"
+    else
+        echo -e "${YELLOW}⚠️  DKIM запись не найдена (может быть ещё не применилась)${NC}"
+    fi
+    
+    echo "Проверяем SPF запись..."
+    local spf_record=$(dig +short $DOMAIN TXT | grep "v=spf1")
+    if [ -n "$spf_record" ]; then
+        echo -e "${GREEN}✅ SPF запись: $spf_record${NC}"
+    else
+        echo -e "${YELLOW}⚠️  SPF запись не найдена${NC}"
+    fi
+    
+    echo
+    print_status "✅ Проверка DNS записей завершена"
 }
 
