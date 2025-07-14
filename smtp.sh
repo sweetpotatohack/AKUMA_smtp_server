@@ -853,22 +853,26 @@ KEY_EOF
     print_status "✅ OpenDKIM настроен успешно"
 }
 
+
+# ================================================
+# PATCH: Исправленная генерация DNS записей
+# ================================================
+
 # Функция для генерации правильных DNS записей
 generate_correct_dns_records() {
-    check_dns_records
-    print_status "🌐 Генерация DNS записей"
+    print_status "🌐 Генерация DNS записей для $DOMAIN"
     
-    # Получаем публичный ключ DKIM
-    local dkim_key=""
+    # Получим публичный ключ DKIM из файла
+    local dkim_public_key=""
     if [ -f "/etc/opendkim/keys/$DOMAIN/default.txt" ]; then
-        dkim_key=$(cat /etc/opendkim/keys/$DOMAIN/default.txt | grep -oP '(?<=p=)[^"]*' | tr -d '\n\t ')
+        dkim_public_key=$(cat /etc/opendkim/keys/$DOMAIN/default.txt | grep -E '^[^;]*' | sed 's/.*TXT[[:space:]]*(//' | sed 's/[[:space:]]*);.*//' | tr -d '\n\t"' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
     fi
     
-    # Создаем файл с DNS записями
+    # Создадим файл с DNS записями
     cat > /root/DNS_RECORDS_$DOMAIN.txt << DNS_EOF
 === DNS записи для $DOMAIN ===
 
-1. A запись для почтового сервера:
+1. A запись:
    Имя: mail.$DOMAIN
    Тип: A
    Значение: $SERVER_IP
@@ -890,7 +894,7 @@ generate_correct_dns_records() {
 4. DKIM запись:
    Имя: default._domainkey.$DOMAIN
    Тип: TXT
-   Значение: "v=DKIM1; k=rsa; p=$dkim_key"
+   Значение: "$dkim_public_key"
    TTL: 3600
 
 5. DMARC запись:
@@ -899,86 +903,27 @@ generate_correct_dns_records() {
    Значение: "v=DMARC1; p=quarantine; rua=mailto:$EMAIL"
    TTL: 3600
 
-=== Команды для проверки ===
+=== КОМАНДЫ ДЛЯ ПРОВЕРКИ ===
 dig +short mail.$DOMAIN A
 dig +short $DOMAIN MX
 dig +short $DOMAIN TXT
 dig +short default._domainkey.$DOMAIN TXT
 dig +short _dmarc.$DOMAIN TXT
 
-=== Важно! ===
-Обязательно добавьте ВСЕ эти записи в DNS вашего провайдера!
-Без правильных DNS записей почта работать не будет!
 DNS_EOF
 
     echo -e "${GREEN}✅ DNS записи созданы в файле: /root/DNS_RECORDS_$DOMAIN.txt${NC}"
-    
-    # Показываем записи на экране
     echo
-    echo "=== КРИТИЧЕСКИ ВАЖНЫЕ DNS ЗАПИСИ ==="
+    echo -e "${YELLOW}=== КРИТИЧЕСКИ ВАЖНО! ===${NC}"
+    echo -e "${YELLOW}Добавьте ВСЕ эти записи в DNS вашего провайдера:${NC}"
     echo
-    echo "1. A запись:"
-    echo "   Имя: mail.$DOMAIN"
-    echo "   Тип: A"
-    echo "   Значение: $SERVER_IP"
+    echo -e "${BLUE}1. A запись: mail.$DOMAIN → $SERVER_IP${NC}"
+    echo -e "${BLUE}2. MX запись: $DOMAIN → mail.$DOMAIN (приоритет 10)${NC}"
+    echo -e "${BLUE}3. SPF запись: $DOMAIN → v=spf1 mx a:mail.$DOMAIN ~all${NC}"
+    echo -e "${BLUE}4. DKIM запись: default._domainkey.$DOMAIN → $dkim_public_key${NC}"
+    echo -e "${BLUE}5. DMARC запись: _dmarc.$DOMAIN → v=DMARC1; p=quarantine; rua=mailto:$EMAIL${NC}"
     echo
-    echo "2. MX запись:"
-    echo "   Имя: $DOMAIN (или @)"
-    echo "   Тип: MX"
-    echo "   Значение: mail.$DOMAIN"
-    echo "   Приоритет: 10"
+    echo -e "${RED}⚠️  БЕЗ ЭТИХ ЗАПИСЕЙ ПОЧТА НЕ БУДЕТ РАБОТАТЬ!${NC}"
     echo
-    echo "3. DKIM запись:"
-    echo "   Имя: default._domainkey.$DOMAIN"
-    echo "   Тип: TXT"
-    echo "   Значение: \"v=DKIM1; k=rsa; p=$dkim_key\""
-    echo
-    echo -e "${YELLOW}⚠️  БЕЗ ЭТИХ ЗАПИСЕЙ ПОЧТА НЕ БУДЕТ РАБОТАТЬ!${NC}"
-    echo
-}
-
-
-# ================================================
-# PATCH: Проверка DNS записей
-# ================================================
-
-# Функция для проверки DNS записей
-check_dns_records() {
-    print_status "🔍 Проверка DNS записей"
-    
-    echo "Проверяем A запись для mail.$DOMAIN..."
-    local a_record=$(dig +short mail.$DOMAIN A)
-    if [ -n "$a_record" ]; then
-        echo -e "${GREEN}✅ A запись: mail.$DOMAIN → $a_record${NC}"
-    else
-        echo -e "${RED}❌ A запись для mail.$DOMAIN не найдена!${NC}"
-    fi
-    
-    echo "Проверяем MX запись для $DOMAIN..."
-    local mx_record=$(dig +short $DOMAIN MX)
-    if [ -n "$mx_record" ]; then
-        echo -e "${GREEN}✅ MX запись: $mx_record${NC}"
-    else
-        echo -e "${RED}❌ MX запись для $DOMAIN не найдена!${NC}"
-    fi
-    
-    echo "Проверяем DKIM запись..."
-    local dkim_record=$(dig +short default._domainkey.$DOMAIN TXT)
-    if [ -n "$dkim_record" ]; then
-        echo -e "${GREEN}✅ DKIM запись найдена${NC}"
-    else
-        echo -e "${YELLOW}⚠️  DKIM запись не найдена (может быть ещё не применилась)${NC}"
-    fi
-    
-    echo "Проверяем SPF запись..."
-    local spf_record=$(dig +short $DOMAIN TXT | grep "v=spf1")
-    if [ -n "$spf_record" ]; then
-        echo -e "${GREEN}✅ SPF запись: $spf_record${NC}"
-    else
-        echo -e "${YELLOW}⚠️  SPF запись не найдена${NC}"
-    fi
-    
-    echo
-    print_status "✅ Проверка DNS записей завершена"
 }
 
