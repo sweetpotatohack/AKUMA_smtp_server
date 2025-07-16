@@ -1065,7 +1065,7 @@ setup_complete_akuma_smtp() {
     echo "📥 Incoming IMAP: mail.trendcommunity.org:993 (SSL) / :143 (STARTTLS)"
     echo "📬 Incoming POP3: mail.trendcommunity.org:995 (SSL) / :110 (STARTTLS)"
     echo "👤 Email: media@trendcommunity.org"
-    echo "🔐 Password: akuma123"
+    echo "🔐 Password: aффффффф"
     echo "🔏 DKIM: Enabled and configured"
     echo "🛡️ SPF: Configured"
     echo "📋 DMARC: Configured"
